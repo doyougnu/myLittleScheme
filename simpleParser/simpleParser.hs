@@ -18,6 +18,17 @@ main = do
 spaces :: Parser ()
 spaces = skipMany1 space
 
+specials :: Parser Char
+specials =
+  do
+    s <- oneOf "\\\"nrt" --this is using haskell escaped backslash and quote
+    return $ case s of
+      'n' -> '\n'
+      't' -> '\t'
+      'r' -> '\r'
+      '\\' -> s
+      '"' -> s
+    
 data LispVal = Atom String
                | List [LispVal]
                | DottedList [LispVal] LispVal
@@ -25,11 +36,14 @@ data LispVal = Atom String
                | String String
                | Bool Bool 
 
+literals :: Parser Char
+literals = letter <|> digit <|> symbol <|> specials
+  
 parseString :: Parser LispVal
 parseString =
   do
     char '"'
-    x <- many (noneOf "\"")
+    x <- many $ specials <|> noneOf "\\\""
     char '"'
     return $ String x
 
