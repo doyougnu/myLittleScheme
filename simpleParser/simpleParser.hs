@@ -82,8 +82,14 @@ parseBool =
     (char 't' >> return (Bool True)) <|> (char 'f' >> return (Bool False))
 
 parseNumber :: Parser LispVal
-parseNumber = parseDecimal <|> parseSchemeDecimal <|> parseHex <|> parseOct <|>
-  parseBin
+parseNumber = try parseFloat -- try to get a float before assuming an Int, Hex, Bin, Oct
+  <|> try parseComplexNumbers
+  <|> try parseRationalNumbers
+  <|> parseDecimal
+  <|> parseSchemeDecimal
+  <|> parseHex
+  <|> parseOct
+  <|> parseBin
 
 parseDecimal :: Parser LispVal
 parseDecimal = many1 digit >>= return . Number . read
@@ -133,18 +139,6 @@ parseCharacter =
       "space" -> ' '
       otherwise -> head x --use of unsafe head
 
---now add parseBool to parse expression
---2.5 add parseChar to parse expression
-parseExpr :: Parser LispVal
-parseExpr = parseAtom
-  <|> parseString
-  <|> try parseFloat -- try to get a float before assuming an Int, Hex, Bin, Oct
-  <|> try parseComplexNumbers
-  <|> try parseRationalNumbers
-  <|> try parseNumber --try's are required because these start with a '#'
-  <|> try parseCharacter --had to get that from the solutions
-  <|> try parseBool
-
 --------------------------- Exercise 2.6 ----------------------------------------
 -- I keep struggling to find the appropriate informatin to match on in the
 -- R5RS, I thought I had to implement exact/nonexact in addition to this...
@@ -178,3 +172,31 @@ parseRationalNumbers =
     b <- many1 digit
     return (Rational ((read a) % (read b))) --didn't know that (%) existed
 
+------------------------Begin section on recursive parsers-----------------------
+parseList :: Parser LispVal
+--sepBy parseExpr spaces seperates a string by spaces on parseExpr criteria
+parseList = liftM List $ sepBy parseExpr spaces 
+
+parseDottedList :: Parser LispVal
+parseDottedList =
+  do
+    head <- endBy parseExpr spaces
+    tail <- char '.' >> spaces >> parseExpr
+    return $ DottedList head tail
+
+parseQuoted :: Parser LispVal
+parseQuoted =
+  do
+    char '\''
+    x <- parseExpr
+    return $ List [Atom "quote", x]
+
+parseExpr :: Parser LispVal
+parseExpr = parseAtom
+  <|> parseString
+  <|> parseNumber --try's are required because these start with a '#'
+  <|> try parseCharacter --had to get the "try" from the solutions
+  <|> try parseBool
+  <|> parseQuoted
+  <|> do char '(' --first bracker
+         try parseList <|> parseDottedList
