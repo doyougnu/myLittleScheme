@@ -31,11 +31,6 @@ data LispVal = Atom String
                | Complex (Complex Double)
                | Rational Rational
 
-parseString :: Parser LispVal
-parseString = do
-                 x <- many $ specials <|> noneOf "\"\\"
-                 return $ String x
-
 parseAtom :: Parser LispVal
 parseAtom =
   do
@@ -69,6 +64,11 @@ specials = do char '\\'
                 'r'  -> '\r'
                 't'  -> '\t'
 
+parseString :: Parser LispVal
+parseString = do char '"'
+                 x <- many $ specials <|> noneOf "\"\\"
+                 char '"'
+                 return $ String x
 --------------------------- Exercise 2.4 ----------------------------------------
 --Scheme defines Octal as #o, decimal as #d, hex as #h
 symbol :: Parser Char
@@ -82,10 +82,7 @@ parseBool =
     (char 't' >> return (Bool True)) <|> (char 'f' >> return (Bool False))
 
 parseNumber :: Parser LispVal
-parseNumber = try parseFloat -- try to get a float before assuming an Int, Hex, Bin, Oct
-  <|> try parseComplexNumbers
-  <|> try parseRationalNumbers
-  <|> parseDecimal
+parseNumber = parseDecimal
   <|> parseSchemeDecimal
   <|> parseHex
   <|> parseOct
@@ -130,14 +127,13 @@ parseCharacter :: Parser LispVal
              -- do
 parseCharacter =
   do
-    x <- try (string "newline" <|> string "space") <|> (do
-                                                           str <- anyChar
-                                                           notFollowedBy alphaNum
-                                                           return [str])
+    try $ string "#\\"
+    x <- try (string "newline" <|> string "space")
+         <|> do {str <- anyChar; notFollowedBy alphaNum; return [str]}
     return . Character $ case x of
       "newline" -> '\n'
       "space" -> ' '
-      otherwise -> head x --use of unsafe head
+      otherwise -> (x !! 0) --use of unsafe head
 
 --------------------------- Exercise 2.6 ----------------------------------------
 -- I keep struggling to find the appropriate informatin to match on in the
@@ -194,9 +190,15 @@ parseQuoted =
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
   <|> parseString
-  <|> parseNumber --try's are required because these start with a '#'
-  <|> try parseCharacter --had to get the "try" from the solutions
   <|> try parseBool
+  <|> try parseComplexNumbers
+  <|> try parseRationalNumbers
+  <|> parseNumber --try's are required because these start with a '#'
+  <|> parseCharacter
   <|> parseQuoted
   <|> do char '(' --first bracker
-         try parseList <|> parseDottedList
+         x <- try parseList <|> parseDottedList
+         char ')'
+         return x
+
+
