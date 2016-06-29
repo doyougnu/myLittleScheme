@@ -25,6 +25,7 @@ data LispVal = Atom String
                | String String
                | Bool Bool
                | Character Char
+               | Float Double
 
 parseString :: Parser LispVal
 parseString = do
@@ -133,6 +134,18 @@ parseCharacter =
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
   <|> parseString
+  <|> try parseFloat -- try to get a float before assuming an Int, Hex, Bin, Oct
   <|> try parseNumber --try's are required because these start with a '#'
   <|> try parseCharacter --had to get that from the solutions
   <|> try parseBool
+
+--------------------------- Exercise 2.6 ----------------------------------------
+-- I keep struggling to find the appropriate informatin to match on in the
+-- R5RS, I thought I had to implement exact/nonexact in addition to this...
+parseFloat :: Parser LispVal
+parseFloat =
+  do
+    x <- many1 digit --many  digits before a '.'
+    char '.' -- match on the ','
+    y <- many1 digit --more digitts after
+    return $ Float . fst . head . readFloat $ (x ++ y) -- readFloat is a zipper
