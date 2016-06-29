@@ -4,6 +4,8 @@ import Control.Monad
 import Numeric
 import Data.List
 import Data.Char ( digitToInt )
+import Data.Complex -- for complex number representation in 2.7
+import Data.Ratio -- for rational numbers
 
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
@@ -26,6 +28,8 @@ data LispVal = Atom String
                | Bool Bool
                | Character Char
                | Float Double
+               | Complex (Complex Double)
+               | Rational Rational
 
 parseString :: Parser LispVal
 parseString = do
@@ -135,6 +139,8 @@ parseExpr :: Parser LispVal
 parseExpr = parseAtom
   <|> parseString
   <|> try parseFloat -- try to get a float before assuming an Int, Hex, Bin, Oct
+  <|> try parseComplexNumbers
+  <|> try parseRationalNumbers
   <|> try parseNumber --try's are required because these start with a '#'
   <|> try parseCharacter --had to get that from the solutions
   <|> try parseBool
@@ -149,3 +155,26 @@ parseFloat =
     char '.' -- match on the ','
     y <- many1 digit --more digitts after
     return $ Float . fst . head . readFloat $ (x ++ y) -- readFloat is a zipper
+
+--------------------------- Exercise 2.7 ----------------------------------------
+toDouble :: LispVal -> Double
+toDouble (Float f) = realToFrac f
+toDouble (Number n) = fromInteger n
+
+parseComplexNumbers :: Parser LispVal
+parseComplexNumbers =
+  do
+    a <- parseFloat <|> parseNumber
+    char '+' --complex nums have pattern a+bi
+    b <- parseFloat <|> parseNumber
+    char 'i'
+    return (Complex (toDouble a :+ toDouble b))
+
+parseRationalNumbers :: Parser LispVal
+parseRationalNumbers =
+  do
+    a <- many1 digit-- a rational num is denoted by a / b /= 0
+    char '/'
+    b <- many1 digit
+    return (Rational ((read a) % (read b))) --didn't know that (%) existed
+
