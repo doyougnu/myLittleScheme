@@ -17,18 +17,17 @@ main = do
 
 spaces :: Parser ()
 spaces = skipMany1 space
-    
+
 data LispVal = Atom String
                | List [LispVal]
                | DottedList [LispVal] LispVal
                | Number Integer
                | String String
                | Bool Bool 
-  
+
 parseString :: Parser LispVal
-parseString = do char '"'
+parseString = do 
                  x <- many $ specials <|> noneOf "\"\\"
-                 char '"'
                  return $ String x
 
 parseAtom :: Parser LispVal
@@ -91,7 +90,7 @@ parseBy str f fToX =
   do try $ string str
      num <- many1 f
      return . Number $ fToX num
-  
+
 parseSchemeDecimal :: Parser LispVal
 parseSchemeDecimal = parseBy "#d" digit read
 
