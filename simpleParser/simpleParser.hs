@@ -23,10 +23,11 @@ data LispVal = Atom String
                | DottedList [LispVal] LispVal
                | Number Integer
                | String String
-               | Bool Bool 
+               | Bool Bool
+               | Character Char
 
 parseString :: Parser LispVal
-parseString = do 
+parseString = do
                  x <- many $ specials <|> noneOf "\"\\"
                  return $ String x
 
@@ -64,20 +65,16 @@ specials = do char '\\'
                 't'  -> '\t'
 
 --------------------------- Exercise 2.4 ----------------------------------------
---Scheme defines Octal as #o, decimal as #d, hex as #h 
+--Scheme defines Octal as #o, decimal as #d, hex as #h
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=>?@^_~"
 
--- so we can no longer parse bools with a prefixed '#'  
+-- so we can no longer parse bools with a prefixed '#'
 parseBool :: Parser LispVal
 parseBool =
   do
     char '#' --match a #
     (char 't' >> return (Bool True)) <|> (char 'f' >> return (Bool False))
-
---now add parseBool to parse expression
-parseExpr :: Parser LispVal
-parseExpr = parseString <|> parseNumber <|> parseBool <|> parseAtom
 
 parseNumber :: Parser LispVal
 parseNumber = parseDecimal <|> parseSchemeDecimal <|> parseHex <|> parseOct <|>
@@ -110,3 +107,32 @@ numToList :: Int -> [Int]
 numToList = map (read . (:[])) . show --probably slow, could use div and mod
 
 bin2Dig = toInteger . foldl' (\acc x -> acc * 2 + digitToInt x) 0
+
+--------------------------- Exercise 2.5 ----------------------------------------
+parseCharacter :: Parser LispVal
+--parseChar
+             --try to parse a whole match on newline or space
+             --or try to match any character not followed by an alpha numeric
+             --return thst as a list
+             -- now try to match newline or space return the corresponding value
+             --if not a match then return the first character match by previous
+             -- do
+parseCharacter =
+  do
+    x <- try (string "newline" <|> string "space") <|> (do
+                                                           str <- anyChar
+                                                           notFollowedBy alphaNum
+                                                           return [str])
+    return . Character $ case x of
+      "newline" -> '\n'
+      "space" -> ' '
+      otherwise -> head x --use of unsafe head
+
+--now add parseBool to parse expression
+--2.5 add parseChar to parse expression
+parseExpr :: Parser LispVal
+parseExpr = parseAtom
+  <|> parseString
+  <|> try parseNumber --try's are required because these start with a '#'
+  <|> try parseCharacter --had to get that from the solutions
+  <|> try parseBool
