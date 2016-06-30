@@ -6,6 +6,7 @@ import Data.List
 import Data.Char ( digitToInt )
 import Data.Complex -- for complex number representation in 2.7
 import Data.Ratio -- for rational numbers
+import Data.Array -- could use haskell vectors instead, harder implementation
 
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
@@ -30,6 +31,7 @@ data LispVal = Atom String
                | Float Double
                | Complex (Complex Double)
                | Rational Rational
+               | Vector (Array Int LispVal)
 
 parseAtom :: Parser LispVal
 parseAtom =
@@ -195,10 +197,42 @@ parseExpr = parseAtom
   <|> try parseRationalNumbers
   <|> parseNumber --try's are required because these start with a '#'
   <|> parseCharacter
+  <|> parseQuasiQuoted
+  <|> parseUnQuote
   <|> parseQuoted
+  <|> try parseVector'
   <|> do char '(' --first bracker
          x <- try parseList <|> parseDottedList
          char ')'
          return x
+--------------------------- Exercise 4.1 ----------------------------------------
+parseQuasiQuoted :: Parser LispVal
+parseQuasiQuoted =
+  do
+    char '`'
+    x <- parseExpr
+    return $ List [Atom "quasiquote", x]
 
+parseUnQuote :: Parser LispVal
+parseUnQuote =
+  do
+    char ','
+    x <- parseExpr
+    return $ List [Atom "unquote", x]
 
+--------------------------- Exercise 4.2 ----------------------------------------
+parseVector :: Parser LispVal
+parseVector =
+  do
+    values <- sepBy parseExpr spaces
+    return $ Vector (listArray (0, (length values) - 1) values)
+
+parseVector' :: Parser LispVal
+parseVector' =
+  do string "#("
+     vector <- parseVector
+     char ')'
+     return vector
+
+--------------------------- Exercise 4.3 ----------------------------------------
+     --skip
