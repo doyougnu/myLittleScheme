@@ -1,12 +1,9 @@
 module SimpleParser.SimpleParser where
 
+import Text.Parsec hiding ( spaces )
 import Text.Parsec.String
-import Text.Parsec.Combinator hiding ( spaces )
---import Data.Attoparsec
 import Control.Monad
 import Numeric
-import Data.List
-import Data.Char ( digitToInt )
 import Data.Complex -- for complex number representation in 2.7
 import Data.Ratio -- for rational numbers
 import Data.Array -- could use haskell vectors instead, harder implementation
@@ -14,7 +11,7 @@ import Data.Array -- could use haskell vectors instead, harder implementation
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
   Left err -> "No match: " ++ show err
-  Right value -> "Found" ++ showVal value
+  Right value -> "Found " ++ showVal value
 
 spaces :: Parser ()
 spaces = skipMany1 space
@@ -91,31 +88,35 @@ parseNumber = parseDecimal
 parseDecimal :: Parser LispVal
 parseDecimal = many1 digit >>= return . Number . read
 
-parseBy str f fToX =
-  do try $ string str
-     num <- many1 f
-     return . Number $ fToX num
-
-parseSchemeDecimal :: Parser LispVal
-parseSchemeDecimal = parseBy "#d" digit read
-
-parseOct :: Parser LispVal
-parseOct = parseBy "#d" octDigit oct2Dig
+parseSchemeDecimal:: Parser LispVal
+parseSchemeDecimal = do try $ string "#d"
+                        x <- many1 digit
+                        (return . Number . read) x
 
 parseHex :: Parser LispVal
-parseHex = parseBy "#o" hexDigit hex2Dig
+parseHex = do try $ string "#x"
+              x <- many1 hexDigit
+              return $ Number (hex2dig x)
+
+parseOct :: Parser LispVal
+parseOct = do try $ string "#o"
+              x <- many1 octDigit
+              return $ Number (oct2dig x)
 
 parseBin :: Parser LispVal
-parseBin = parseBy "#b" (oneOf "01") bin2Dig
-
-oct2Dig = fst . head . readOct
-hex2Dig = fst . head . readHex
+parseBin = do try $ string "#b"
+              x <- many1 (oneOf "10")
+              return $ Number (bin2dig x)
 
 numToList :: Int -> [Int]
 numToList = map (read . (:[])) . show --probably slow, could use div and mod
 
-bin2Dig = toInteger . foldl' (\acc x -> acc * 2 + digitToInt x) 0
-
+oct2dig x = fst $ readOct x !! 0
+hex2dig x = fst $ readHex x !! 0
+bin2dig  = bin2dig' 0
+bin2dig' digint "" = digint
+bin2dig' digint (x:xs) = let old = 2 * digint + (if x == '0' then 0 else 1) in
+                         bin2dig' old xs
 --------------------------- Exercise 2.5 ----------------------------------------
 parseCharacter :: Parser LispVal
 --parseChar

@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
--- stack --resolver lts-3.2 --install-ghc runghc --package turtle
+-- stack --resolver lts-3.2 --install-ghc runghc --package myLittleScheme
 module Main where
 
 import SimpleParser.SimpleParser
