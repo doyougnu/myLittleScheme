@@ -1,7 +1,8 @@
 module SimpleParser.SimpleParser where
 
-import Text.ParserCombinators.Parsec hiding ( spaces )
-import System.Environment
+import Text.Parsec.String
+import Text.Parsec.Combinator hiding ( spaces )
+--import Data.Attoparsec
 import Control.Monad
 import Numeric
 import Data.List
@@ -13,12 +14,7 @@ import Data.Array -- could use haskell vectors instead, harder implementation
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
   Left err -> "No match: " ++ show err
-  Right _ -> "Found Value"
-
-main :: IO ()
-main = do
-  (expr:_) <- getArgs
-  putStrLn (readExpr expr)
+  Right value -> "Found" ++ showVal value
 
 spaces :: Parser ()
 spaces = skipMany1 space
@@ -238,3 +234,23 @@ parseVector' =
 
 --------------------------- Exercise 4.3 ----------------------------------------
      --skip
+
+showVal :: LispVal -> String
+showVal (String contents) = "\"" ++ contents ++ "\""
+showVal (Atom name) = name
+showVal (Number contents) = show contents
+showVal (Float num) = show num
+showVal (Complex num) = show num
+showVal (Rational num) = show num
+showVal (Vector arr) = unlines . map showVal . elems $ arr
+showVal (Bool True) = "#t"
+showVal (Bool False) = "#f"
+showVal (List values) = "(" ++ unwordsList values ++ ")"
+showVal (DottedList h t) = "(" ++ unwordsList h ++ " . " ++ showVal t
+  ++ ")"
+showVal (Character c) = [c]
+
+unwordsList :: [LispVal] -> String
+unwordsList = unwords . map showVal
+
+instance Show LispVal where show = showVal
