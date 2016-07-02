@@ -1,3 +1,3 @@
 module Evaluator where
 
-import SimpleParser
+import SimpleParser.SimpleParser

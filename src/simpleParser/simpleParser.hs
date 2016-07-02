@@ -1,4 +1,4 @@
-module SimpleParser where
+module SimpleParser.SimpleParser where
 
 import Text.ParserCombinators.Parsec hiding ( spaces )
 import System.Environment
