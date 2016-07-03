@@ -7,4 +7,10 @@ import Evaluator.Evaluator
 import System.Environment
 
 main :: IO ()
-main = getArgs >>= print . eval . readExpr . head
+main =
+  do
+    args <- getArgs
+    --the evaled line is awful, besides the antipattern of !! 0, the >>= has
+    --high precedence than $, so you the data in the statement changes directions
+    evaled <- return $ liftM show & readExpr (args !! 0) >>= evaled
+    putStrLn . extractValue . trapError $ evaled

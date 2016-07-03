@@ -1,28 +1,35 @@
 module Evaluator.Evaluator where
 
 import SimpleParser.SimpleParser
+import Text.Parsec hiding ( spaces )
+import Control.Monad.Error
+import Text.ParserCombinators.Parsec.Error -- for ParseError 
 
-eval :: LispVal -> LispVal
-eval val@(String _) = val
-eval val@(Character _) = val
-eval val@(Rational _) = val
-eval val@(Vector _) = val
-eval val@(Float _) = val
-eval val@(Complex _) = val
-eval val@(Atom _) = val
-eval val@(Number _) = val
-eval val@(Bool _) = val
-eval (List [Atom "quote", val]) = val
-eval (List (Atom f:args)) = apply f $ map eval args
+eval :: LispVal -> ThrowsError LispVal
+--so much repition, why not use _ as catch all?
+eval val@(String _) = return val
+eval val@(Character _) = return val
+eval val@(Rational _) = return val
+eval val@(Vector _) = return val
+eval val@(Float _) = return val
+eval val@(Complex _) = return val
+eval val@(Atom _) = return val
+eval val@(Number _) = return val
+eval val@(Bool _) = return val
+eval (List [Atom "quote", val]) = return val
+eval (List (Atom f:args)) = mapM eval args >>= apply f
+eval badform = throwError $ BadSpecialForm "Unrecognized special Form" badform
 
-apply :: String -> [LispVal] -> LispVal
+apply :: String -> [LispVal] -> ThrowsError LispVal
 -- given a string, lookup that string in primitive
 -- if you get a match primitives returns the right function
 -- apply that function to the arguements
 -- else return book false, the behaviour of maybe dictates the whole thing
-apply f args = maybe (Bool False) ($ args) $ lookup f primitives
+apply f args = maybe (throwError $ NotFunction
+                      "Unrecognized primitive function args" f)
+  ($ args) (lookup f primitives)
 
-primitives :: [(String, [LispVal] -> LispVal)]  
+primitives :: [(String, [LispVal] -> ThrowsError LispVal)]  
 primitives = [("+", numericBinop (+))
              , ("-", numericBinop (-))
              , ("*", numericBinop (*))
@@ -36,19 +43,25 @@ primitives = [("+", numericBinop (+))
              , ("list?", unaryOp listp)
              , ("bool?", unaryOp boolp)]
 
-numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal 
-numericBinop op params = Number $ foldl1 op $ map unpackNum params
+numericBinop :: (Integer -> Integer -> Integer) -> [LispVal]
+             -> ThrowsError LispVal 
+numericBinop op _ = throwError $ NumArgs 2 []
+numericBinop _ singleval@[_] = throwError $ NumArgs 2 singleval
+numericBinop op params = mapM unpackNum params >>= return . Number . foldl1 op
 
-unpackNum :: LispVal -> Integer
-unpackNum (Number n) = n
-
+unpackNum :: LispVal -> ThrowsError Integer
+unpackNum (Number n) = return n
+unpackNum (String n) = let parsed = reads n in
+  if null parsed
+     then throwError $ TypeMismatch "number" $ String n
+          else return . fst . head $ parsed
 unpackNum (List [n]) = unpackNum n
-unpackNum _ = 0
+unpackNum notNum = throwError $ TypeMismatch "number" notNum
 
 --------------------------- Exercise 4.1.2.3 ------------------------------------
 -- given the exercises its hard to tell what is actually being asked for
-unaryOp :: (LispVal -> LispVal) -> [LispVal] -> LispVal
-unaryOp f [values] = f values
+unaryOp :: (LispVal -> LispVal) -> [LispVal] -> ThrowsError LispVal
+unaryOp f [values] = return $ f values
 
 listp, boolp, nump, symbolp, stringp :: LispVal -> LispVal
 stringp (String _) = Bool True
@@ -68,3 +81,40 @@ symTostr (Atom x) = String x
 symTostr _ = String ""
 strTosym (String x) = Atom x
 strTosym _ = String ""
+
+--------------------------- Begin section on Error handling ---------------------
+data LispError = NumArgs Integer [LispVal]
+               | TypeMismatch String LispVal
+               | Parser ParseError
+               | BadSpecialForm String LispVal
+               | NotFunction String String
+               | UnboundVar String String
+               | Default String
+
+instance Show LispError where show = showError
+
+showError :: LispError -> String
+showError (NumArgs expected found) = "Expected: " ++ show expected ++
+  "but found: " ++ unwordsList found
+showError (TypeMismatch expected found) = "Type mismatch; Got: " ++
+  show found ++ " but Expected: " ++ expected
+showError (Parser error) = "Parse error at: " ++ show error
+showError (UnboundVar message var) = message ++ " : " ++ show var
+showError (BadSpecialForm message val) = message ++ " : " ++ show val 
+showError (NotFunction message func) = message ++ " : " ++ show func
+
+instance Error LispError where
+  noMsg = Default "and error has occured"
+  strMsg = Default
+
+type ThrowsError = Either LispError
+
+trapError action = catchError action (return . show)
+
+extractValue :: ThrowsError a -> a
+extractValue (Right a) = a --purposefully leave Left to fail, so we fail fast
+
+readExpr :: String -> ThrowsError LispVal
+readExpr input = case parse parseExpr "lisp" input of
+  Left err -> throwError $ Parser err
+  Right value -> return value

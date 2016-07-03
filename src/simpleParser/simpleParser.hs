@@ -8,11 +8,6 @@ import Data.Complex -- for complex number representation in 2.7
 import Data.Ratio -- for rational numbers
 import Data.Array -- could use haskell vectors instead, harder implementation
 
-readExpr :: String -> LispVal
-readExpr input = case parse parseExpr "lisp" input of
-  Left err -> Atom $ "No match: " ++ show err
-  Right value -> value
-
 spaces :: Parser ()
 spaces = skipMany1 space
 
