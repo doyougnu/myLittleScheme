@@ -12,5 +12,5 @@ main =
     args <- getArgs
     --the evaled line is awful, besides the antipattern of !! 0, the >>= has
     --high precedence than $, so you the data in the statement changes directions
-    evaled <- return $ liftM show & readExpr (args !! 0) >>= evaled
+    evaled <- return $ fmap show $ readExpr (args !! 0) >>= eval
     putStrLn . extractValue . trapError $ evaled

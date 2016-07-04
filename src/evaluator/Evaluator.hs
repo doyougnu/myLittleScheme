@@ -2,7 +2,7 @@ module Evaluator.Evaluator where
 
 import SimpleParser.SimpleParser
 import Text.Parsec hiding ( spaces )
-import Control.Monad.Error
+import Control.Monad.Error --deprecated but following the book :/
 import Text.ParserCombinators.Parsec.Error -- for ParseError 
 
 eval :: LispVal -> ThrowsError LispVal
@@ -45,8 +45,8 @@ primitives = [("+", numericBinop (+))
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal]
              -> ThrowsError LispVal 
-numericBinop op _ = throwError $ NumArgs 2 []
-numericBinop _ singleval@[_] = throwError $ NumArgs 2 singleval
+numericBinop op [] = throwError $ NumArgs 2 []
+numericBinop op singleval@[_] = throwError $ NumArgs 2 singleval
 numericBinop op params = mapM unpackNum params >>= return . Number . foldl1 op
 
 unpackNum :: LispVal -> ThrowsError Integer
@@ -95,7 +95,7 @@ instance Show LispError where show = showError
 
 showError :: LispError -> String
 showError (NumArgs expected found) = "Expected: " ++ show expected ++
-  "but found: " ++ unwordsList found
+  " args but found: " ++ unwordsList found
 showError (TypeMismatch expected found) = "Type mismatch; Got: " ++
   show found ++ " but Expected: " ++ expected
 showError (Parser error) = "Parse error at: " ++ show error
