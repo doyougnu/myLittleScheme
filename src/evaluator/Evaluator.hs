@@ -4,6 +4,7 @@ import SimpleParser.SimpleParser
 import Text.Parsec hiding ( spaces )
 import Control.Monad.Error --deprecated but following the book :/
 import Text.ParserCombinators.Parsec.Error -- for ParseError
+import Data.IORef
 
 apply :: String -> [LispVal] -> ThrowsError LispVal
 -- given a string, lookup that string in primitive
@@ -258,3 +259,48 @@ equal badArgList = throwError $ NumArgs 2 badArgList
 
 --------------------------- Exercise 5.3 ---------------------------------------
 --see eval
+
+--------------------- Begin Section on Variable Assignment ---------------------
+type Env = IORef [(String, IORef LispVal)]
+
+nullEnv :: IO Env
+nullEnv = newIORef []
+
+type IOThrowsError = ErrorT LispError IO
+
+liftThrows :: ThrowsError a -> IOThrowsError a
+liftThrows (Left err) = throwError err
+liftThrows (Right val) = return val
+
+runIOThrows :: IOThrowsError String -> IO String
+runIOThrows action = runErrorT (trapError action) >>= return . extractValue
+
+isBound :: Env -> String -> IO Bool
+isBound envRef var = readIORef envRef >>=
+  return . maybe False (const True) . lookup var
+
+getVar :: Env -> String -> IOThrowsError LispVal
+getVar envRef var =
+  do env <- liftIO $ readIORef envRef
+     maybe (throwError $ UnboundVar "Getting an unbound variable" var)
+       (liftIO . readIORef)
+       (lookup var env)
+
+setVar :: Env -> String -> LispVal -> IOThrowsError LispVal
+setVar envRef var value =
+  do env <- liftIO $ readIORef envRef
+     maybe (throwError $ UnboundVar "Setting an unbounded varaible" var)
+       (liftIO . (flip writeIORef value))
+       (lookup var env)
+     return value
+
+defineVar :: Env -> String -> LispVal -> IOThrowsError LispVal
+defineVar envRef var value =
+  do alreadyDefined <- liftIO $ isBound envRef var
+     if alreadyDefined
+       then setVar envRef var value >> return value
+       else liftIO $
+            do valueRef <- newIORef value
+               env <- readIORef envRef
+               writeIORef envRef ((var, valueRef) : env)
+               return value
