@@ -1,5 +1,5 @@
+{-# LANGUAGE ExistentialQuantification #-}
 module Evaluator.Evaluator where
-
 import SimpleParser.SimpleParser
 import Text.Parsec hiding ( spaces )
 import Control.Monad.Error --deprecated but following the book :/
@@ -195,3 +195,12 @@ eqv [List arg1, List arg2] = return . Bool $ (length arg1 == length arg2)
 eqv [_, _] = return $ Bool False
 eqv badArgList = throwError $ NumArgs 2 badArgList
       
+-------------------- Begin Section Weak Typing and heterogeneous lists ---------
+data Unpacker = forall a. Eq a => AnyUnpacker (LispVal -> ThrowsError a)
+
+unpacksEquals :: LispVal -> LispVal -> Unpacker -> ThrowsError Bool
+unpacksEquals arg1 arg2 (AnyUnpacker f) =
+  do unpacked1 <- unpacker arg1
+     unpacked2 <- unpacker arg2
+     return $ unpacked1 == unpacked2
+     `catchError` (const $ return False)
