@@ -197,6 +197,16 @@ eval (List [Atom "if", pred, conseq, alt]) =
       Bool True -> eval conseq
       otherwise -> throwError $ TypeMismatch "bool" pred
 eval (List (Atom f:args)) = mapM eval args >>= apply f
+eval form@(List (Atom "cond" : clauses)) =
+  if null clauses
+     then throwError $ BadSpecialForm "no true clause in cond expression: " form
+     else case head clauses of
+      List [Atom "else", expr] -> eval expr
+      List [test, expr] -> eval $ List [Atom "if"
+                                       , test
+                                       , expr
+                                       , List (Atom "cond" : tail clauses)]
+      _ -> throwError $ BadSpecialForm "ill-formed cond expression: " form
 eval badform = throwError $ BadSpecialForm "Unrecognized special Form" badform
 
 --------------------------- Exercise 5.2 ---------------------------------------
@@ -233,3 +243,6 @@ equal [arg1, arg2] =
      eqvEquals <- eqv [arg1, arg2]
      return . Bool $ (primitiveEquals || let (Bool x) = eqvEquals in x)
 equal badArgList = throwError $ NumArgs 2 badArgList
+
+--------------------------- Exercise 5.3 ---------------------------------------
+--see eval
