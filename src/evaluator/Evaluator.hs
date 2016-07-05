@@ -166,20 +166,6 @@ cons [x, DottedList ys zs] = return $ DottedList (x:ys) zs
 cons [x, y] = return $ DottedList [x] y
 cons badArgList = throwError $ NumArgs 2 badArgList
 
-eqv :: [LispVal] -> ThrowsError LispVal
-eqv [Bool arg1, Bool arg2] = return $ Bool (arg1 == arg2)
-eqv [Number arg1, Number arg2] = return $ Bool (arg1 == arg2)
-eqv [String arg1, String arg2] = return $ Bool (arg1 == arg2)
-eqv [DottedList as a, DottedList bs b] = eqv [List $ as ++ [a], List $ bs ++ [b]]
-eqv [List arg1, List arg2] = return . Bool $ (length arg1 == length arg2)
-  && (all eqvPair $ zip arg1 arg2)
-  where
-    eqvPair (x, y) = case eqv [x, y] of
-      Left err -> False
-      Right (Bool val) -> val
-eqv [_, _] = return $ Bool False
-eqv badArgList = throwError $ NumArgs 2 badArgList
-
 -------------------- Begin Section Weak Typing and heterogeneous lists ---------
 data Unpacker = forall a. Eq a => AnyUnpacker (LispVal -> ThrowsError a)
 
@@ -189,14 +175,6 @@ unpacksEquals arg1 arg2 (AnyUnpacker f) =
      unpacked2 <- f arg2
      return $ unpacked1 == unpacked2
      `catchError` (const $ return False)
-
-equal :: [LispVal] -> ThrowsError LispVal
-equal [arg1, arg2] =
-  do primitiveEquals <- liftM or $ mapM (unpacksEquals arg1 arg2)
-       [AnyUnpacker unpackNum, AnyUnpacker unpackStr, AnyUnpacker unpackBool]
-     eqvEquals <- eqv [arg1, arg2]
-     return . Bool $ (primitiveEquals || let (Bool x) = eqvEquals in x)
-equal badArgList = throwError $ NumArgs 2 badArgList
 
 --------------------------- Exercise 5.1 ---------------------------------------
 eval :: LispVal -> ThrowsError LispVal
@@ -220,3 +198,38 @@ eval (List [Atom "if", pred, conseq, alt]) =
       otherwise -> throwError $ TypeMismatch "bool" pred
 eval (List (Atom f:args)) = mapM eval args >>= apply f
 eval badform = throwError $ BadSpecialForm "Unrecognized special Form" badform
+
+--------------------------- Exercise 5.2 ---------------------------------------
+eqvList :: ([LispVal] -> ThrowsError LispVal) -> [LispVal] -> ThrowsError LispVal
+eqvList eqvFunc [(List arg1), (List arg2)] = return . Bool $ (length arg1 ==
+                                                             length arg2) &&
+  (all eqvPair $ zip arg1 arg2)
+  where eqvPair (x, y) = case eqvFunc [x, y] of
+          Left err -> False
+          Right (Bool val) -> val
+
+eqv :: [LispVal] -> ThrowsError LispVal
+eqv [Bool arg1, Bool arg2] = return $ Bool (arg1 == arg2)
+eqv [Number arg1, Number arg2] = return $ Bool (arg1 == arg2)
+eqv [String arg1, String arg2] = return $ Bool (arg1 == arg2)
+eqv [l@(List arg1), k@(List arg2)] = eqvList equal [l, k]
+eqv [DottedList as a, DottedList bs b] = eqv [List $ as ++ [a], List $ bs ++ [b]]
+eqv [List arg1, List arg2] = return . Bool $ (length arg1 == length arg2)
+  && (all eqvPair $ zip arg1 arg2)
+  where
+    eqvPair (x, y) = case eqv [x, y] of
+      Left err -> False
+      Right (Bool val) -> val
+eqv [_, _] = return $ Bool False
+eqv badArgList = throwError $ NumArgs 2 badArgList
+
+equal :: [LispVal] -> ThrowsError LispVal
+equal [l@(List arg1), k@(List arg2)] = eqvList equal [l, k]
+equal [(DottedList xs x), (DottedList ys y)] = equal [List $ xs ++ [x]
+                                                     , List $ ys ++ [y]]
+equal [arg1, arg2] =
+  do primitiveEquals <- liftM or $ mapM (unpacksEquals arg1 arg2)
+       [AnyUnpacker unpackNum, AnyUnpacker unpackStr, AnyUnpacker unpackBool]
+     eqvEquals <- eqv [arg1, arg2]
+     return . Bool $ (primitiveEquals || let (Bool x) = eqvEquals in x)
+equal badArgList = throwError $ NumArgs 2 badArgList
