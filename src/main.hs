@@ -2,15 +2,14 @@
 -- stack --resolver lts-3.2 --install-ghc runghc --package myLittleScheme
 module Main where
 
-import SimpleParser.SimpleParser
-import Evaluator.Evaluator
 import System.Environment
+import Repl.Repl
 
 main :: IO ()
 main =
   do
     args <- getArgs
-    --the evaled line is awful, besides the antipattern of !! 0, the >>= has
-    --high precedence than $, so you the data in the statement changes directions
-    evaled <- return $ fmap show $ readExpr (args !! 0) >>= eval
-    putStrLn . extractValue . trapError $ evaled
+    case length args of
+      0 -> runRepl
+      1 -> evalAndPrint . head $ args
+      otherwise -> putStrLn "Program only takes 1 or 0 arguments"
