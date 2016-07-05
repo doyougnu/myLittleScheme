@@ -207,6 +207,18 @@ eval form@(List (Atom "cond" : clauses)) =
                                        , expr
                                        , List (Atom "cond" : tail clauses)]
       _ -> throwError $ BadSpecialForm "ill-formed cond expression: " form
+eval form@(List (Atom "case" : key : clauses)) =
+  if null clauses
+  then throwError $ BadSpecialForm "no true clauses in case expression: " form
+  else case head clauses of
+    List (Atom "else" : exprs) -> mapM eval exprs >>= return . last
+    List ((List datums) : exprs) -> do
+      result <- eval key
+      equality <- mapM (\x -> eqv [result, x]) datums
+      if (Bool True `elem` equality)
+      then mapM eval exprs >>= return . last
+      else eval $ List (Atom "case" : key : tail clauses)
+    _ -> throwError $ BadSpecialForm "ill-formed case expression: " form
 eval badform = throwError $ BadSpecialForm "Unrecognized special Form" badform
 
 --------------------------- Exercise 5.2 ---------------------------------------

@@ -22,6 +22,7 @@ data LispVal = Atom String
                | Complex (Complex Double)
                | Rational Rational
                | Vector (Array Int LispVal)
+                 deriving Eq
 
 parseAtom :: Parser LispVal
 parseAtom =
