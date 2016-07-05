@@ -3,28 +3,7 @@ module Evaluator.Evaluator where
 import SimpleParser.SimpleParser
 import Text.Parsec hiding ( spaces )
 import Control.Monad.Error --deprecated but following the book :/
-import Text.ParserCombinators.Parsec.Error -- for ParseError 
-
-eval :: LispVal -> ThrowsError LispVal
---so much repition, why not use _ as catch all?
-eval val@(String _) = return val
-eval val@(Character _) = return val
-eval val@(Rational _) = return val
-eval val@(Vector _) = return val
-eval val@(Float _) = return val
-eval val@(Complex _) = return val
-eval val@(Atom _) = return val
-eval val@(Number _) = return val
-eval val@(Bool _) = return val
-eval (List [Atom "quote", val]) = return val
-eval (List [Atom "if", pred, conseq, alt]) =
-  do
-    result <- eval pred
-    case result of
-      Bool False -> eval alt
-      otherwise -> eval conseq
-eval (List (Atom f:args)) = mapM eval args >>= apply f
-eval badform = throwError $ BadSpecialForm "Unrecognized special Form" badform
+import Text.ParserCombinators.Parsec.Error -- for ParseError
 
 apply :: String -> [LispVal] -> ThrowsError LispVal
 -- given a string, lookup that string in primitive
@@ -35,7 +14,7 @@ apply f args = maybe (throwError $ NotFunction
                       "Unrecognized primitive function args" f)
   ($ args) (lookup f primitives)
 
-primitives :: [(String, [LispVal] -> ThrowsError LispVal)]  
+primitives :: [(String, [LispVal] -> ThrowsError LispVal)]
 primitives = [("+", numericBinop (+))
              , ("-", numericBinop (-))
              , ("*", numericBinop (*))
@@ -76,7 +55,7 @@ boolBinop unpacker op args = if length args /= 2
                                      right <- unpacker $ args !! 1
                                      return . Bool $ left `op` right
 
-numBoolBinop = boolBinop unpackNum                                     
+numBoolBinop = boolBinop unpackNum
 strBoolBinop = boolBinop unpackStr
 boolBoolBinop = boolBinop unpackBool
 
@@ -200,7 +179,7 @@ eqv [List arg1, List arg2] = return . Bool $ (length arg1 == length arg2)
       Right (Bool val) -> val
 eqv [_, _] = return $ Bool False
 eqv badArgList = throwError $ NumArgs 2 badArgList
-      
+
 -------------------- Begin Section Weak Typing and heterogeneous lists ---------
 data Unpacker = forall a. Eq a => AnyUnpacker (LispVal -> ThrowsError a)
 
@@ -217,4 +196,27 @@ equal [arg1, arg2] =
        [AnyUnpacker unpackNum, AnyUnpacker unpackStr, AnyUnpacker unpackBool]
      eqvEquals <- eqv [arg1, arg2]
      return . Bool $ (primitiveEquals || let (Bool x) = eqvEquals in x)
-equal badArgList = throwError $ NumArgs 2 badArgList     
+equal badArgList = throwError $ NumArgs 2 badArgList
+
+--------------------------- Exercise 5.1 ---------------------------------------
+eval :: LispVal -> ThrowsError LispVal
+--so much repition, why not use _ as catch all?
+eval val@(String _) = return val
+eval val@(Character _) = return val
+eval val@(Rational _) = return val
+eval val@(Vector _) = return val
+eval val@(Float _) = return val
+eval val@(Complex _) = return val
+eval val@(Atom _) = return val
+eval val@(Number _) = return val
+eval val@(Bool _) = return val
+eval (List [Atom "quote", val]) = return val
+eval (List [Atom "if", pred, conseq, alt]) =
+  do
+    result <- eval pred
+    case result of
+      Bool False -> eval alt
+      Bool True -> eval conseq
+      otherwise -> throwError $ TypeMismatch "bool" pred
+eval (List (Atom f:args)) = mapM eval args >>= apply f
+eval badform = throwError $ BadSpecialForm "Unrecognized special Form" badform
