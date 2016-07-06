@@ -26,7 +26,11 @@ until_ pred prompt action = do
           else action result >> until_ pred prompt action
 
 runOne :: String -> IO ()
-runOne expr = primitiveBindings >>= flip evalAndPrint expr
+runOne args =
+  do
+    env <- primitiveBindings >>= flip bindVars [("args", List . map String . drop 1 $ args)]
+    (runIOThrows $ liftM show $ eval env (List [Atom "load", String $ head args]))
+    >>= hPutStrLn stderr
 
 runRepl :: IO ()
 runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "Scheme>>> ") . evalAndPrint
