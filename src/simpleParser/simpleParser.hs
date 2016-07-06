@@ -7,6 +7,8 @@ import Numeric
 import Data.Complex -- for complex number representation in 2.7
 import Data.Ratio -- for rational numbers
 import Data.Array -- could use haskell vectors instead, harder implementation
+import Data.IORef
+import Control.Monad.Error --deprecated but following the book :/
 
 spaces :: Parser ()
 spaces = skipMany1 space
@@ -22,7 +24,31 @@ data LispVal = Atom String
                | Complex (Complex Double)
                | Rational Rational
                | Vector (Array Int LispVal)
-                 deriving Eq
+               | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
+               | Func { params :: [String], vararg :: Maybe String
+                      , body :: [LispVal], closure :: Env}
+
+data LispError = NumArgs Integer [LispVal]
+               | TypeMismatch String LispVal
+               | Parser ParseError
+               | BadSpecialForm String LispVal
+               | NotFunction String String
+               | UnboundVar String String
+               | Default String
+
+showError :: LispError -> String
+showError (NumArgs expected found) = "Expected: " ++ show expected ++
+  " args but found: " ++ unwordsList found
+showError (TypeMismatch expected found) = "Type mismatch; Got: " ++
+  show found ++ " but Expected: " ++ expected
+showError (Parser error) = "Parse error at: " ++ show error
+showError (UnboundVar message var) = message ++ " : " ++ show var
+showError (BadSpecialForm message val) = message ++ " : " ++ show val 
+showError (NotFunction message func) = message ++ " : " ++ show func
+
+instance Show LispError where show = showError
+type ThrowsError = Either LispError
+type Env = IORef [(String, IORef LispVal)]
 
 parseAtom :: Parser LispVal
 parseAtom =
@@ -246,6 +272,12 @@ showVal (List values) = "(" ++ unwordsList values ++ ")"
 showVal (DottedList h t) = "(" ++ unwordsList h ++ " . " ++ showVal t
   ++ ")"
 showVal (Character c) = [c]
+showVal (PrimitiveFunc _) = "primitive"
+showVal (Func {params = args, vararg = varargs, body = body, closure = env}) =
+  "(lambda (" ++ unwords (map show args) ++
+  (case varargs of
+      Nothing -> ""
+      Just arg -> " . " ++ arg) ++ ") ...)"
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal

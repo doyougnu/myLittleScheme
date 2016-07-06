@@ -2,18 +2,25 @@
 module Evaluator.Evaluator where
 import SimpleParser.SimpleParser
 import Text.Parsec hiding ( spaces )
-import Control.Monad.Error --deprecated but following the book :/
 import Text.ParserCombinators.Parsec.Error -- for ParseError
+import Control.Monad.Error --deprecated but following the book :/
 import Data.IORef
 
-apply :: String -> [LispVal] -> ThrowsError LispVal
--- given a string, lookup that string in primitive
--- if you get a match primitives returns the right function
--- apply that function to the arguements
--- else return book false, the behaviour of maybe dictates the whole thing
-apply f args = maybe (throwError $ NotFunction
-                      "Unrecognized primitive function args" f)
-  ($ args) (lookup f primitives)
+apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
+apply (PrimitiveFunc func) args = liftThrows $ func args
+apply (Func params varargs body closure) args =
+  if num params /= num args && varargs == Nothing
+     then throwError $ NumArgs (num params) args
+          else (liftIO . bindVars closure $ zip params args)
+               >>= bindVarArgs varargs
+               >>= evalBody
+  where
+    remainingArgs = drop (length params) args
+    num = toInteger . length
+    evalBody env = liftM last $ mapM (eval env) body
+    bindVarArgs arg env = case arg of
+      Just argName -> liftIO $ bindVars env [(argName, List remainingArgs)]
+      Nothing -> return env
 
 primitives :: [(String, [LispVal] -> ThrowsError LispVal)]
 primitives = [("+", numericBinop (+))
@@ -110,31 +117,9 @@ strTosym (String x) = Atom x
 strTosym _ = String ""
 
 --------------------------- Begin section on Error handling ---------------------
-data LispError = NumArgs Integer [LispVal]
-               | TypeMismatch String LispVal
-               | Parser ParseError
-               | BadSpecialForm String LispVal
-               | NotFunction String String
-               | UnboundVar String String
-               | Default String
-
-instance Show LispError where show = showError
-
-showError :: LispError -> String
-showError (NumArgs expected found) = "Expected: " ++ show expected ++
-  " args but found: " ++ unwordsList found
-showError (TypeMismatch expected found) = "Type mismatch; Got: " ++
-  show found ++ " but Expected: " ++ expected
-showError (Parser error) = "Parse error at: " ++ show error
-showError (UnboundVar message var) = message ++ " : " ++ show var
-showError (BadSpecialForm message val) = message ++ " : " ++ show val 
-showError (NotFunction message func) = message ++ " : " ++ show func
-
 instance Error LispError where
   noMsg = Default "and error has occured"
   strMsg = Default
-
-type ThrowsError = Either LispError
 
 trapError action = catchError action (return . show)
 
@@ -198,9 +183,21 @@ eval env (List [Atom "if", pred, conseq, alt]) =
       Bool True -> eval env conseq
       otherwise -> throwError $ TypeMismatch "bool" pred
 eval env (List [Atom "set!", Atom var, form]) = eval env form >>= setVar env var
-eval env (List [Atom "define", Atom var, form]) =
-  eval env form >>= defineVar env var
-eval env (List (Atom f:args)) = mapM (eval env) args >>= liftThrows . apply f
+eval env (List (Atom "define" : List (Atom var : params) : body)) =
+  makeNormalFunc env params body >>= defineVar env var
+eval env (List (Atom "define" : DottedList (Atom var:params) varargs:body)) =
+  makeVarArgs varargs env params body >>= defineVar env var
+eval env (List (Atom "lambda" : List params:body)) =
+  makeNormalFunc env params body
+eval env (List (Atom "lambda" : DottedList params varargs : body)) =
+  makeVarArgs varargs env params body
+eval env (List (Atom "lambda" : varargs@(Atom _) : body)) =
+  makeVarArgs varargs env [] body
+eval env (List (function : args)) =
+  do
+    func <- eval env function
+    argVals <- mapM (eval env) args
+    apply func argVals
 eval env form@(List (Atom "cond" : clauses)) =
   if null clauses
      then throwError $ BadSpecialForm "no true clause in cond expression: " form
@@ -252,7 +249,6 @@ equal badArgList = throwError $ NumArgs 2 badArgList
 --see eval
 
 --------------------- Begin Section on Variable Assignment ---------------------
-type Env = IORef [(String, IORef LispVal)]
 
 nullEnv :: IO Env
 nullEnv = newIORef []
@@ -302,3 +298,14 @@ bindVars envRef bindings = readIORef envRef >>= extendEnv bindings >>= newIORef
         addBinding (var, value) =
           do ref <- newIORef value
              return (var, ref)
+
+primitiveBindings :: IO Env
+primitiveBindings = nullEnv
+  >>= (flip bindVars $ map makePrimitiveFunc primitives)
+  where
+    makePrimitiveFunc (var, func) = (var, PrimitiveFunc func)
+
+makeFunc varargs env params body = return $
+  Func (map showVal params) varargs body env
+makeNormalFunc = makeFunc Nothing
+makeVarArgs = makeFunc . Just . showVal
