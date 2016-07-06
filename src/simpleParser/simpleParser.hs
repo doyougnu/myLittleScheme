@@ -1,5 +1,6 @@
 module SimpleParser.SimpleParser where
 
+import System.IO
 import Text.Parsec hiding ( spaces )
 import Text.Parsec.String
 import Control.Monad
@@ -12,6 +13,8 @@ import Control.Monad.Error --deprecated but following the book :/
 
 spaces :: Parser ()
 spaces = skipMany1 space
+
+type IOThrowsError = ErrorT LispError IO
 
 data LispVal = Atom String
                | List [LispVal]
@@ -27,6 +30,8 @@ data LispVal = Atom String
                | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
                | Func { params :: [String], vararg :: Maybe String
                       , body :: [LispVal], closure :: Env}
+               | IOFunc ([LispVal] -> IOThrowsError LispVal)
+               | Port Handle
 
 data LispError = NumArgs Integer [LispVal]
                | TypeMismatch String LispVal
@@ -278,6 +283,8 @@ showVal (Func {params = args, vararg = varargs, body = body, closure = env}) =
   (case varargs of
       Nothing -> ""
       Just arg -> " . " ++ arg) ++ ") ...)"
+showVal (Port _) = "<IO port>"
+showVal (IOFunc _) = "<IO primitive>"
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal
