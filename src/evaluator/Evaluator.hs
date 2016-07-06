@@ -178,49 +178,40 @@ unpacksEquals arg1 arg2 (AnyUnpacker f) =
      `catchError` (const $ return False)
 
 --------------------------- Exercise 5.1 ---------------------------------------
-eval :: LispVal -> ThrowsError LispVal
+eval :: Env -> LispVal -> IOThrowsError LispVal
 --so much repition, why not use _ as catch all?
-eval val@(String _) = return val
-eval val@(Character _) = return val
-eval val@(Rational _) = return val
-eval val@(Vector _) = return val
-eval val@(Float _) = return val
-eval val@(Complex _) = return val
-eval val@(Atom _) = return val
-eval val@(Number _) = return val
-eval val@(Bool _) = return val
-eval (List [Atom "quote", val]) = return val
-eval (List [Atom "if", pred, conseq, alt]) =
+eval env val@(String _) = return val
+eval env val@(Character _) = return val
+eval env val@(Rational _) = return val
+eval env val@(Vector _) = return val
+eval env val@(Float _) = return val
+eval env val@(Complex _) = return val
+eval env val@(Atom id) = getVar env id
+eval env val@(Number _) = return val
+eval env val@(Bool _) = return val
+eval env (List [Atom "quote", val]) = return val
+eval env (List [Atom "if", pred, conseq, alt]) =
   do
-    result <- eval pred
+    result <- eval env pred
     case result of
-      Bool False -> eval alt
-      Bool True -> eval conseq
+      Bool False -> eval env alt
+      Bool True -> eval env conseq
       otherwise -> throwError $ TypeMismatch "bool" pred
-eval (List (Atom f:args)) = mapM eval args >>= apply f
-eval form@(List (Atom "cond" : clauses)) =
+eval env (List [Atom "set!", Atom var, form]) = eval env form >>= setVar env var
+eval env (List [Atom "define", Atom var, form]) =
+  eval env form >>= defineVar env var
+eval env (List (Atom f:args)) = mapM (eval env) args >>= liftThrows . apply f
+eval env form@(List (Atom "cond" : clauses)) =
   if null clauses
      then throwError $ BadSpecialForm "no true clause in cond expression: " form
      else case head clauses of
-      List [Atom "else", expr] -> eval expr
-      List [test, expr] -> eval $ List [Atom "if"
+      List [Atom "else", expr] -> eval env expr
+      List [test, expr] -> eval env $ List [Atom "if"
                                        , test
                                        , expr
                                        , List (Atom "cond" : tail clauses)]
       _ -> throwError $ BadSpecialForm "ill-formed cond expression: " form
-eval form@(List (Atom "case" : key : clauses)) =
-  if null clauses
-  then throwError $ BadSpecialForm "no true clauses in case expression: " form
-  else case head clauses of
-    List (Atom "else" : exprs) -> mapM eval exprs >>= return . last
-    List ((List datums) : exprs) -> do
-      result <- eval key
-      equality <- mapM (\x -> eqv [result, x]) datums
-      if (Bool True `elem` equality)
-      then mapM eval exprs >>= return . last
-      else eval $ List (Atom "case" : key : tail clauses)
-    _ -> throwError $ BadSpecialForm "ill-formed case expression: " form
-eval badform = throwError $ BadSpecialForm "Unrecognized special Form" badform
+eval _ badform = throwError $ BadSpecialForm "Unrecognized special Form" badform
 
 --------------------------- Exercise 5.2 ---------------------------------------
 eqvList :: ([LispVal] -> ThrowsError LispVal) -> [LispVal] -> ThrowsError LispVal
@@ -304,3 +295,10 @@ defineVar envRef var value =
                env <- readIORef envRef
                writeIORef envRef ((var, valueRef) : env)
                return value
+
+bindVars :: Env -> [(String, LispVal)] -> IO Env
+bindVars envRef bindings = readIORef envRef >>= extendEnv bindings >>= newIORef
+  where extendEnv bindings env = liftM (++ env) (mapM addBinding bindings)
+        addBinding (var, value) =
+          do ref <- newIORef value
+             return (var, ref)

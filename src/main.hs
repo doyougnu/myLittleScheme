@@ -11,5 +11,5 @@ main =
     args <- getArgs
     case length args of
       0 -> runRepl
-      1 -> evalAndPrint . head $ args
+      1 -> runOne . head $ args
       otherwise -> putStrLn "Program only takes 1 or 0 arguments"
