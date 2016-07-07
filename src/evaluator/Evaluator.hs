@@ -128,6 +128,7 @@ trapError action = catchError action (return . show)
 extractValue :: ThrowsError a -> a
 extractValue (Right a) = a --purposefully leave Left to fail, so we fail fast
 
+readOrThrow :: Parser a -> String -> ThrowsError a
 readOrThrow parser input = case parse parser "lisp" input of
     Left err  -> throwError $ Parser err
     Right val -> return val
